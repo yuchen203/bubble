@@ -35,14 +35,16 @@ clean_dir(vel_dir)
 # hyper parameters
 res_x = 128
 res_y = 128
-dx = 1.0 / res_y
-total_frames = 100
-frame_dt = 0.01
-CFL = 0.2
-sigma = 1.0
+L = 2.0 * 1e-3
+dx = L / res_y
+total_frames = 300
+frame_dt = 10.0 * 1e-6
+CFL = 0.1
+sigma = 58.6 * 1e-3
 g = 0.0
 narrowband_width = 5.0 * dx
-rho_ratio = 10.0
+rho_L = 1014.5
+rho_G = 12.8
 # field
 phi = ti.field(dtype=float, shape=(res_x, res_y))
 error = ti.field(dtype=float, shape=(res_x, res_y))
@@ -57,7 +59,7 @@ tmp_y = ti.field(dtype=float, shape=(res_x, res_y + 1))
 max_speed = ti.field(dtype=float, shape=())
 
 # solver
-vel_proj = TwoPhaseVelProjJump2d([res_x, res_y], dx, phi, [vel_x, vel_y], rho_ratio, 1.0)
+vel_proj = TwoPhaseVelProjJump2d([res_x, res_y], dx, phi, [vel_x, vel_y], rho_L, rho_G)
 
 
 @ti.func
@@ -83,9 +85,9 @@ def msign(x):
 
 @ti.kernel
 def init_two_spheres_phi_kernel(phi: ti.template(), dx: float):
-    center1 = ti.Vector([0.4, 0.5])
-    center2 = ti.Vector([0.6, 0.5])
-    radius = 0.1
+    center1 = ti.Vector([700 * 1e-6, 1000 * 1e-6])
+    center2 = ti.Vector([1300 * 1e-6, 1000 * 1e-6])
+    radius = 300 * 1e-6
     for i, j in phi:
         pos = ti.Vector([(i + 0.5) * dx, (j + 0.5) * dx])
         phi[i, j] = -ti.min((pos - center1).norm() - radius, (pos - center2).norm() - radius)
@@ -103,8 +105,8 @@ def output_phi(phi, dx, output_dir, file_prefix):
     for contour in contours:
         ax.plot(contour[:, 0] * dx, contour[:, 1] * dx, linewidth=2)
     ax.axis("image")
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.0])
+    ax.set_xlim([0.0, L])
+    ax.set_ylim([0.0, L])
     os.makedirs(output_dir, exist_ok=True)
     fig.savefig(os.path.join(output_dir, file_prefix + ".jpg"), dpi=512 // 4)
 

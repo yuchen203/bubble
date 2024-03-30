@@ -136,16 +136,21 @@ def advect_field_kernel(
     BL_x: float,
     BL_y: float,
 ):
-    neg_dt = -1.0 * dt
     for i, j in field_new:
-        pos = ti.Vector([(i + BL_x) * dx, (j + BL_y) * dx])
-        u1 = interp_u_MAC(vel_x, vel_y, pos, dx)
-        # first
-        pos1 = pos + neg_dt * u1 * 0.5
-        # second
-        u2 = interp_u_MAC(vel_x, vel_y, pos1, dx)
-        pos2 = pos + neg_dt * u2
-        field_new[i, j] = interp_2d(field_old, pos2, dx, BL_x, BL_y)
+        if i  > 0 and i < res_x - 1 and j > 0 and j < res_y - 1:
+            pos = ti.Vector([(i + BL_x) * dx, (j + BL_y) * dx])
+            u = interp_u_MAC(vel_x, vel_y, pos, dx)
+            partial_x, partial_y = 0.0, 0.0
+            # first-order upwind
+            if u[0] > 0.0:
+                partial_x = (field_old[i, j] - field_old[i - 1, j]) / dx
+            else:
+                partial_x = (field_old[i + 1, j] - field_old[i, j]) / dx
+            if u[1] > 0.0:
+                partial_y = (field_old[i, j] - field_old[i, j - 1]) / dx
+            else:
+                partial_y = (field_old[i, j + 1] - field_old[i, j]) / dx
+            field_new[i, j] = field_old[i, j] - dt * (u[0] * partial_x + u[1] * partial_y)
 
 
 def fast_marching(phi):

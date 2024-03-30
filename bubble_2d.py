@@ -33,17 +33,17 @@ def clean_dir(dir):
 clean_dir(phi_dir)
 clean_dir(vel_dir)
 # hyper parameters
-res_x = 128
-res_y = 128
+res_x = 256
+res_y = 256
 L = 2.0 * 1e-3
 dx = L / res_y
 total_frames = 300
 frame_dt = 10.0 * 1e-6
 CFL = 0.1
-sigma = 58.6 * 1e-3
+sigma = 58.7 * 1e-3
 g = 0.0
 narrowband_width = 5.0 * dx
-rho_L = 1014.5
+rho_L = 1012.6
 rho_G = 12.8
 # field
 phi = ti.field(dtype=float, shape=(res_x, res_y))

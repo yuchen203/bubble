@@ -57,7 +57,7 @@ tmp_y = ti.field(dtype=float, shape=(res_x, res_y + 1))
 max_speed = ti.field(dtype=float, shape=())
 
 # solver
-vel_proj = TwoPhaseVelProjJump2d([res_x, res_y], dx, phi, [vel_x, vel_y], rho_ratio)
+vel_proj = TwoPhaseVelProjJump2d([res_x, res_y], dx, phi, [vel_x, vel_y], rho_ratio, 1.0)
 
 
 @ti.func
@@ -171,14 +171,14 @@ def set_jump_kernel(
                 pos_right = ti.Vector([(i + 0.5) * dx, (j + 0.5) * dx])
                 intf_pos = (1.0 - theta) * pos_left + theta * pos_right
                 st_jump = sigma * curvature_2d(phi, intf_pos, dx)
-                jump_x[i, j] = st_jump * dt / dx
+                jump_x[i, j] = st_jump
             elif phi[i - 1, j] >= 0.0 and phi[i, j] < 0.0:
                 theta = get_theta(phi[i, j], phi[i - 1, j])
                 pos_left = ti.Vector([(i - 0.5) * dx, (j + 0.5) * dx])
                 pos_right = ti.Vector([(i + 0.5) * dx, (j + 0.5) * dx])
                 intf_pos = (1.0 - theta) * pos_right + theta * pos_left
                 st_jump = sigma * curvature_2d(phi, intf_pos, dx)
-                jump_x[i, j] = st_jump * dt / dx
+                jump_x[i, j] = st_jump
             else:
                 jump_x[i, j] = 0.0
         else:
@@ -192,14 +192,14 @@ def set_jump_kernel(
                 pos_top = ti.Vector([(i + 0.5) * dx, (j + 0.5) * dx])
                 intf_pos = (1.0 - theta) * pos_bottom + theta * pos_top
                 st_jump = sigma * curvature_2d(phi, intf_pos, dx)
-                jump_y[i, j] = st_jump * dt / dx
+                jump_y[i, j] = st_jump
             elif phi[i, j - 1] >= 0.0 and phi[i, j] < 0.0:
                 theta = get_theta(phi[i, j], phi[i, j - 1])
                 pos_bottom = ti.Vector([(i + 0.5) * dx, (j - 0.5) * dx])
                 pos_top = ti.Vector([(i + 0.5) * dx, (j + 0.5) * dx])
                 intf_pos = (1.0 - theta) * pos_top + theta * pos_bottom
                 st_jump = sigma * curvature_2d(phi, intf_pos, dx)
-                jump_y[i, j] = st_jump * dt / dx
+                jump_y[i, j] = st_jump
             else:
                 jump_y[i, j] = 0.0
         else:
@@ -221,7 +221,7 @@ def advance(dt):
 
     print("div before proj", np.max(abs(vel_proj.solver.b.to_numpy())))
 
-    vel_proj.project(verbose=True)
+    vel_proj.project(dt, verbose=True)
     vel_proj.calc_div_kernel(vel_proj.solver.b)
     print("div after proj", np.max(abs(vel_proj.solver.b.to_numpy())))
 

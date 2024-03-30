@@ -1,0 +1,15 @@
+__pycache__/
+.vscode/
+output/
+tmp.py
+pybind/fm/build/*
+*/output/
+*.so
+*.pyd
+*.dll
+*.sln
+*.sdf
+*.opensdf
+*.vcxproj
+*.vcxproj.user
+*.filters

@@ -11,7 +11,6 @@ from utils import *
 from project import *
 
 
-
 # init taichi
 ti.init(arch=ti.cuda, device_memory_GB=4.0, debug=False, default_fp=ti.f64)
 
@@ -23,6 +22,7 @@ vel_dir = os.path.join(output_dir, "vel")
 os.makedirs(output_dir, exist_ok=True)
 os.makedirs(phi_dir, exist_ok=True)
 os.makedirs(vel_dir, exist_ok=True)
+
 
 def clean_dir(dir):
     files = glob.glob(os.path.join(dir, "*"))
@@ -44,107 +44,55 @@ g = 0.0
 narrowband_width = 5.0 * dx
 rho_ratio = 10.0
 # field
-phi = ti.field(dtype=float, shape = (res_x, res_y))
-error = ti.field(dtype = float, shape = (res_x, res_y))
+phi = ti.field(dtype=float, shape=(res_x, res_y))
+error = ti.field(dtype=float, shape=(res_x, res_y))
 
-vel_x = ti.field(dtype =float, shape = (res_x + 1, res_y))
-vel_y = ti.field(dtype =float, shape = (res_x, res_y + 1))
+vel_x = ti.field(dtype=float, shape=(res_x + 1, res_y))
+vel_y = ti.field(dtype=float, shape=(res_x, res_y + 1))
 
-tmp_field = ti.field(dtype = float, shape = (res_x, res_y))
-tmp_x = ti.field(dtype = float, shape = (res_x + 1, res_y))
-tmp_y = ti.field(dtype = float, shape = (res_x, res_y + 1))
+tmp_field = ti.field(dtype=float, shape=(res_x, res_y))
+tmp_x = ti.field(dtype=float, shape=(res_x + 1, res_y))
+tmp_y = ti.field(dtype=float, shape=(res_x, res_y + 1))
 
-max_speed = ti.field(dtype = float, shape = ())
+max_speed = ti.field(dtype=float, shape=())
 
 # solver
 vel_proj = TwoPhaseVelProjJump2d([res_x, res_y], dx, phi, [vel_x, vel_y], rho_ratio)
+
+
 @ti.func
 def sign(x):
     ret = 0.0
-    if x <0.0:
+    if x < 0.0:
         ret = -1.0
-    elif x ==0.0:
+    elif x == 0.0:
         ret = 0.0
     else:
         ret = 1.0
     return ret
 
+
 @ti.func
 def msign(x):
     ret = 0.0
-    if x <0.0:
+    if x < 0.0:
         ret = -1.0
     else:
         ret = 1.0
     return ret
 
 @ti.kernel
-def init_ellipse_phi_kernel(phi:ti.template(), dx:float):
-    center = ti.Vector([0.5, 0.5])
-    a = 0.3
-    b = 0.1
+def init_two_spheres_phi_kernel(phi: ti.template(), dx: float):
+    center1 = ti.Vector([0.4, 0.5])
+    center2 = ti.Vector([0.6, 0.5])
+    radius = 0.1
     for i, j in phi:
         pos = ti.Vector([(i + 0.5) * dx, (j + 0.5) * dx])
-        dis = ti.abs(pos - center)
-        p = dis
-        ab = ti.Vector([a, b])
-        if p[0] > p[1]:
-            p = ti.Vector([p[1], p[0]])
-            ab = ti.Vector([b, a])
-        l = ab[1] * ab[1] - ab[0] * ab[0]
-        m = ab[0] * p[0] / l
-        n = ab[1] * p[1] / l
-        m2 = m * m
-        n2 = n * n
-        c = (m2 + n2 - 1.0) / 3.0
-        c3 = c * c * c
-        d = c3 + m2 *n2
-        q = d + m2 *n2
-        g = m + m*n2
-        co = 0.0
-        if d<0.0:
-            h = ti.acos(q/c3)/3.0
-            s = ti.cos(h) + 2.0
-            t = ti.sin(h) * ti.sqrt(3.0)
-            rx  = ti.sqrt(m2 - c*(s+t))
-            ry= ti.sqrt(m2 - c*(s-t))
-            co = ry + sign(l) * rx + ti.abs(g) / (rx*ry)
-        else:
-            h = 2.0 * m * n * ti.sqrt(d)
-            s = msign(q + h) *ti.pow(ti.abs(q + h), 1.0/3.0)
-            t = msign(q - h) *ti.pow(ti.abs(q - h), 1.0/3.0)
-            rx = -(s + t) - c * 4.0 + 2.0 * m2
-            ry = (s - t) * ti.sqrt(3.0)
-            rm = ti.sqrt(rx * rx + ry * ry)
-            co = ry / ti.sqrt(rm - rx) + 2.0 * g / rm
-        co=(co-m)/2.0
-        si = ti.sqrt(ti.max(1.0-co*co, 0.0))
-        r = ab *ti.Vector([co, si])
-        phi[i, j] = (r-p).norm() * msign(p[1] - r[1])
-        
-@ti.kernel
-def init_sphere_phi(phi: ti.template(), dx: float):
-    center = ti.Vector([0.5, 0.5])
-    radius = 0.3
-    for i, j in phi:
-        pos = ti.Vector([(i + 0.5) * dx, (j + 0.5) * dx])
-        phi[i, j] = (pos - center).norm() - radius
+        phi[i, j] = -ti.min((pos - center1).norm() - radius, (pos - center2).norm() - radius)
 
-@ti.kernel
-def init_drop_tank_phi_kernel(
-    phi: ti.template(),
-    dx: float,
-):
-    r = 0.1
-    for i, j in phi:
-        dis = ti.sqrt(((i + 0.5) * dx - 0.5) ** 2 + ((j + 0.5) * dx - 0.75) ** 2)
-        phi[i, j] = dis - r
-        phi[i, j] = ti.min((j + 0.5) * dx - 0.35, phi[i, j])
 
 def init():
-    init_ellipse_phi_kernel(phi, dx)
-    #init_drop_tank_phi_kernel(phi, dx)
-    #init_sphere_phi(phi, dx)
+    init_two_spheres_phi_kernel(phi, dx)
 
 def output_phi(phi, dx, output_dir, file_prefix):
     np_phi = phi.to_numpy()
@@ -160,6 +108,7 @@ def output_phi(phi, dx, output_dir, file_prefix):
     os.makedirs(output_dir, exist_ok=True)
     fig.savefig(os.path.join(output_dir, file_prefix + ".jpg"), dpi=512 // 4)
 
+
 def output_matplot(frame):
     # phi
     output_phi(phi, dx, phi_dir, "{:03d}".format(frame))
@@ -168,11 +117,13 @@ def output_matplot(frame):
     write_field(vel_x.to_numpy(), vel_dir, "vel_x{:03d}".format(frame), True)
     write_field(vel_y.to_numpy(), vel_dir, "vel_y{:03d}".format(frame), True)
 
+
 @ti.func
 def interp_u_MAC(u_x, u_y, p, dx):
     u_x_p = interp_2d(u_x, p, dx, BL_x=0.0, BL_y=0.5)
     u_y_p = interp_2d(u_y, p, dx, BL_x=0.5, BL_y=0.0)
     return ti.Vector([u_x_p, u_y_p])
+
 
 @ti.kernel
 def advect_field_kernel(
@@ -196,15 +147,19 @@ def advect_field_kernel(
         pos2 = pos + neg_dt * u2
         field_new[i, j] = interp_2d(field_old, pos2, dx, BL_x, BL_y)
 
+
 def fast_marching(phi):
     phi_np = phi.to_numpy().astype(float)
     fm.fm_2d(phi_np, float(narrowband_width), float(dx))
     phi.from_numpy(phi_np)
 
+
 @ti.kernel
-def set_jump_kernel(phi: ti.template(), jump_x: ti.template(), jump_y: ti.template(), dt: float):
+def set_jump_kernel(
+    phi: ti.template(), jump_x: ti.template(), jump_y: ti.template(), dt: float
+):
     for i, j in jump_x:
-        if i > 0 and  i < res_x:
+        if i > 0 and i < res_x:
             if phi[i - 1, j] < 0.0 and phi[i, j] >= 0.0:
                 theta = get_theta(phi[i - 1, j], phi[i, j])
                 pos_left = ti.Vector([(i - 0.5) * dx, (j + 0.5) * dx])
@@ -245,6 +200,7 @@ def set_jump_kernel(phi: ti.template(), jump_x: ti.template(), jump_y: ti.templa
         else:
             jump_y[i, j] = 0.0
 
+
 def advance(dt):
     advect_field_kernel(tmp_field, phi, vel_x, vel_y, dx, dt, 0.5, 0.5)
     phi.copy_from(tmp_field)
@@ -257,12 +213,13 @@ def advance(dt):
 
     set_jump_kernel(phi, vel_proj.jump[0], vel_proj.jump[1], dt)
     vel_proj.calc_div_kernel(vel_proj.solver.b)
-    
-    print("div before proj", np.max(abs(vel_proj.solver.b.to_numpy())))   
 
-    vel_proj.project(verbose = True)
+    print("div before proj", np.max(abs(vel_proj.solver.b.to_numpy())))
+
+    vel_proj.project(verbose=True)
     vel_proj.calc_div_kernel(vel_proj.solver.b)
-    print("div after proj", np.max(abs(vel_proj.solver.b.to_numpy())))  
+    print("div after proj", np.max(abs(vel_proj.solver.b.to_numpy())))
+
 
 @ti.kernel
 def calc_max_speed(u_x: ti.template(), u_y: ti.template()):
@@ -272,6 +229,7 @@ def calc_max_speed(u_x: ti.template(), u_y: ti.template()):
         v = 0.5 * (u_y[i, j] + u_y[i, j + 1])
         speed = ti.sqrt(u**2 + v**2)
         ti.atomic_max(max_speed[None], speed)
+
 
 def main():
     init()
@@ -292,4 +250,6 @@ def main():
             if last_step_in_frame:
                 output_matplot(frame)
                 break
+
+
 main()

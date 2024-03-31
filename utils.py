@@ -104,3 +104,66 @@ def write_field(
         p = ax.imshow(array, alpha=0.4, cmap=cmap, vmin=vmin, vmax=vmax)
     fig.colorbar(p, fraction=0.046, pad=0.04)
     fig.savefig(os.path.join(outdir, file_prefix + ".jpg"), dpi=512 // 4)
+
+@ti.func
+def sample_3d(qf: ti.template(), u: float, v: float, w: float):
+    u_dim, v_dim, w_dim = qf.shape
+    i = ti.max(0, ti.min(int(u), u_dim - 1))
+    j = ti.max(0, ti.min(int(v), v_dim - 1))
+    k = ti.max(0, ti.min(int(w), w_dim - 1))
+    return qf[i, j, k]
+
+@ti.func
+def interp_3d(vf, p, dx, BL_x=0.5, BL_y=0.5, BL_z=0.5):
+    u_dim, v_dim, w_dim = vf.shape
+
+    u, v, w = p / dx
+    u = u - BL_x
+    v = v - BL_y
+    w = w - BL_z
+    s = ti.max(0.0, ti.min(u, u_dim - 1 - eps))
+    t = ti.max(0.0, ti.min(v, v_dim - 1 - eps))
+    l = ti.max(0.0, ti.min(w, w_dim - 1 - eps))
+
+    # floor
+    iu, iv, iw = ti.floor(s), ti.floor(t), ti.floor(l)
+
+    interped = 0.0 * sample_3d(vf, iu, iv, iw)
+
+    # loop over indices
+    for i in range(0, 2):
+        for j in range(0, 2):
+            for k in range(0, 2):
+                x_p_x_i = s - (iu + i)  # x_p - x_i
+                y_p_y_i = t - (iv + j)
+                z_p_z_i = l - (iw + k)
+                value = sample_3d(vf, iu + i, iv + j, iw + k)
+                interped += value * N_1(x_p_x_i) * N_1(y_p_y_i) * N_1(z_p_z_i)
+
+    return interped
+
+@ti.func
+def normal_3d(phi, pos, dx):
+    nx = (interp_3d(phi, pos + ti.Vector([dx, 0.0, 0.0], dt=float), dx) - interp_3d(phi, pos - ti.Vector([dx, 0.0, 0.0], dt=float), dx)) / (2 * dx)
+    ny = (interp_3d(phi, pos + ti.Vector([0.0, dx, 0.0], dt=float), dx) - interp_3d(phi, pos - ti.Vector([0.0, dx, 0.0], dt=float), dx)) / (2 * dx)
+    nz = (interp_3d(phi, pos + ti.Vector([0.0, 0.0, dx], dt=float), dx) - interp_3d(phi, pos - ti.Vector([0.0, 0.0, dx], dt=float), dx)) / (2 * dx)
+    return ti.Vector([nx, ny, nz], dt=float).normalized()
+
+@ti.func
+def curvature_3d(phi, pos, dx):
+    one_over_dx = 1.0 / dx
+    one_over_2dx = 0.5 * one_over_dx
+    nx_left = normal_3d(phi, pos - ti.Vector([dx, 0.0, 0.0], dt=float), dx)
+    nx_right = normal_3d(phi, pos + ti.Vector([dx, 0.0, 0.0], dt=float), dx)
+    ny_left = normal_3d(phi, pos - ti.Vector([0.0, dx, 0.0], dt=float), dx)
+    ny_right = normal_3d(phi, pos + ti.Vector([0.0, dx, 0.0], dt=float), dx)
+    nz_left = normal_3d(phi, pos - ti.Vector([0.0, 0.0, dx], dt=float), dx)
+    nz_right = normal_3d(phi, pos + ti.Vector([0.0, 0.0, dx], dt=float), dx)
+    ret = (nx_right[0] - nx_left[0] + ny_right[1] - ny_left[1] + nz_right[2] - nz_left[2]) * one_over_2dx
+    if abs(ret) > one_over_dx:
+        if ret < 0.0:
+            ret = -one_over_dx
+        else:
+            ret = one_over_dx
+    return ret
+

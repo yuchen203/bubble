@@ -12,7 +12,7 @@ from project import *
 
 
 # init taichi
-ti.init(arch=ti.cuda, device_memory_GB=4.0, debug=False, default_fp=ti.f64)
+ti.init(arch=ti.cuda, device_memory_GB=4.0, debug=False, default_fp=ti.f32)
 
 # output dir
 output_dir = os.path.join("output", "bubble_2d")

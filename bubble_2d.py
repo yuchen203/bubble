@@ -45,6 +45,7 @@ g = 0.0
 narrowband_width = 5.0 * dx
 rho_L = 1012.6
 rho_G = 12.8
+d = 600 * 1e-6
 # field
 phi = ti.field(dtype=float, shape=(res_x, res_y))
 error = ti.field(dtype=float, shape=(res_x, res_y))
@@ -259,4 +260,41 @@ def main():
                 break
 
 
-main()
+def f(r):
+    global sigma, rho_G, d
+    ret = sigma / rho_G
+    ret *= 1.0 / (d - np.sqrt(d * d - 4 * r * r)) - 1.0 / (r * 2.0)
+    if np.isnan(ret) or ret < 0.0:
+        print("fuck")
+        print(ret, r, d, np.sqrt(d * d - 4 * r * r))
+        exit()
+    ret = np.sqrt(ret)
+    return ret
+
+def plot():
+    global sigma, rho_G, d
+    tau = np.sqrt(rho_G * (0.5 * d) ** 3 / sigma)
+    num = 100000
+    dt = tau / num * 0.4
+    r = 1e-6
+    t_list = [0.0]
+    r_list = [r]
+    for i in range(num):
+        # solve ode with rk4
+        r0 = r
+        f0 = f(r0)
+        r1 = r + f0 * 0.5 * dt
+        f1 = f(r1)
+        r2 = r + f1 * 0.5 * dt
+        f2 = f(r2)
+        r3 = r + f2 * dt
+        f3 = f(r3)
+        r = r + dt / 6 * (f0 + 2 * f1 + 2 * f2 + f3)
+        t_list.append((i + 1) * dt / tau)
+        r_list.append(r / (0.5 * d))
+    plt.plot(t_list, r_list)
+    plt.show()
+    
+#main()
+
+plot()

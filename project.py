@@ -227,7 +227,7 @@ class TwoPhaseVelProjJump3d:
             if j == 0 or j == self.res[1]:
                 self.vel[1][i, j, k] = 0.0
         for i, j, k in self.vel[2]:
-            if k == 2 or k == self.res[2]:
+            if k == 0 or k == self.res[2]:
                 self.vel[2][i, j, k] = 0.0
 
     @ti.kernel
@@ -433,4 +433,3 @@ class TwoPhaseVelProjJump3d:
                     p0 = pressure[i, j, k - 1]
                     p1 = pressure[i, j, k] + self.jump[2][i, j, k]
                     self.vel[2][i, j, k] += (p1 - p0) * Ax[i, j, k - 1][2] * self.dx
-

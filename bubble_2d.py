@@ -33,11 +33,11 @@ def clean_dir(dir):
 clean_dir(phi_dir)
 clean_dir(vel_dir)
 # hyper parameters
-res_x = 256
-res_y = 256
+res_x = 128
+res_y = 128
 L = 2.0 * 1e-3
 dx = L / res_y
-total_frames = 300
+total_frames = 30
 frame_dt = 10.0 * 1e-6
 CFL = 0.1
 sigma = 58.7 * 1e-3
@@ -259,26 +259,66 @@ def main():
                 output_matplot(frame)
                 break
 
+def caculate_neck_radius():
+    left = res_x // 2 - 1
+    right = res_x // 2
+    phi_np = phi.to_numpy()
+    interface_y = 0.0
+    for i in range(res_y // 2 - 1):
+        coord_y = res_y // 2 + i
+        phi_mid = 0.5 * (phi_np[left, coord_y] + phi_np[right, coord_y])
+        phi_next = 0.5 * (phi_np[left, coord_y + 1] + phi_np[right, coord_y + 1])
+        if phi_mid * phi_next < 0.0:
+            theta = phi_next / (phi_next - phi_mid)
+            interface_y = coord_y * theta + (coord_y + 1) * (1.0 - theta)
+    pos_y = (interface_y + 0.5) * dx
+    neck = pos_y - 0.5 * L
+    return neck
+
+def get_simulation_plot():
+    init()
+    r = caculate_neck_radius()
+    r_list = [r / (0.5 * d)]
+    t_list = [0.0]
+    tau = np.sqrt(rho_L * (0.5 * d) ** 3 / sigma)
+    total_time = 0.0
+    for frame in range(1, total_frames):
+        print("frame ", frame)
+        cur_t = 0.0
+        while True:
+            calc_max_speed(vel_x, vel_y)
+            dt = CFL * dx / max_speed[None]
+            last_step_in_frame = False
+            if cur_t + dt >= frame_dt:
+                last_step_in_frame = True
+                dt = frame_dt - cur_t
+            cur_t += dt
+            advance(dt)
+            total_time += dt
+            if total_time < 0.4 * tau:
+                r = caculate_neck_radius()
+                r_list.append(r / (0.5 * d))
+                t_list.append(total_time / tau)
+            if last_step_in_frame:
+                output_matplot(frame)
+                break
+    return t_list, r_list
 
 def f(r):
-    global sigma, rho_G, d
-    ret = sigma / rho_G
+    global sigma, rho_L, d
+    ret = sigma / rho_L
     ret *= 1.0 / (d - np.sqrt(d * d - 4 * r * r)) - 1.0 / (r * 2.0)
-    if np.isnan(ret) or ret < 0.0:
-        print("fuck")
-        print(ret, r, d, np.sqrt(d * d - 4 * r * r))
-        exit()
     ret = np.sqrt(ret)
     return ret
 
-def plot():
-    global sigma, rho_G, d
-    tau = np.sqrt(rho_G * (0.5 * d) ** 3 / sigma)
+def solve_thoroddsen():
+    global sigma, rho_L, d
+    tau = np.sqrt(rho_L * (0.5 * d) ** 3 / sigma)
     num = 100000
     dt = tau / num * 0.4
-    r = 1e-6
+    r = 6.778e-5
     t_list = [0.0]
-    r_list = [r]
+    r_list = [r / (0.5 * d)]
     for i in range(num):
         # solve ode with rk4
         r0 = r
@@ -292,9 +332,19 @@ def plot():
         r = r + dt / 6 * (f0 + 2 * f1 + 2 * f2 + f3)
         t_list.append((i + 1) * dt / tau)
         r_list.append(r / (0.5 * d))
-    plt.plot(t_list, r_list)
-    plt.show()
-    
-#main()
+    return t_list, r_list
 
+def plot():
+
+    # get thoroddsen results
+    thoroddsen_t, thoroddsen_r = solve_thoroddsen()
+    # get simulation results
+    sim_t, sim_r = get_simulation_plot()
+    plt.clf()
+    plt.plot(thoroddsen_t, thoroddsen_r, label="thoroddsen model")
+    plt.plot(sim_t, sim_r, label="simulation")
+    plt.legend()
+    plt.savefig(os.path.join(output_dir, "neck_radius_evolution.jpg"))
+
+#main()
 plot()
